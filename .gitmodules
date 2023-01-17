@@ -1,0 +1,6 @@
+[submodule "lib/eeglab"]
+	path = lib/eeglab
+	url = git@github.com:sccn/eeglab.git
+[submodule "lib/unfold"]
+	path = lib/unfold
+	url = git@github.com:unfoldtoolbox/unfold.git
