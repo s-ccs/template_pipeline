@@ -14,91 +14,97 @@
 %
 % René Skukies
 % Benedikt Ehinger
-%
-% Adapted to be used on MSc_EventDuration data.
-%
 % Martin Geiger
+%
+% Adapted to be used as template for CCS projects.
+
 
 close all; clear; clc;
 
 % Start EEGLAB
-%addpath '/home/geiger/MATLAB_Add-Ons/Collections/EEGLAB'
-addpath '/store/users/skukies/TonalLang/lib/eeglab'
+addpath './lib/eeglab'
+addpath './lib/unfold'
+addpath './lib/zapline-plus'
+
+
 [ALLEEG, EEG, CURRENTSET, ALLCOM] = eeglab;
 
-% Install plugins
-% plugin_askinstall('bva-io','pop_loadbv',1)
-% plugin_askinstall('iclabel','pop_iclabel',1)
-% plugin_askinstall('clean_rawdata','pop_clean_rawdata',1)
-% plugin_askinstall('amica','pop_amica',1)
-% plugin_askinstall('firfilt','',1)
-% plugin_askinstall('dipfit','',1)
-% plugin_askinstall('BIDS-matlab-tools','pop_importbids',1)
-% plugin_askinstall('viewprops','pop_prop_extended',1)
+%% Install plugins
+plugin_askinstall('bva-io','pop_loadbv',1)
+plugin_askinstall('iclabel','pop_iclabel',1)
+plugin_askinstall('clean_rawdata','pop_clean_rawdata',1)
+plugin_askinstall('amica','pop_amica',1)
+plugin_askinstall('firfilt','',1)
+plugin_askinstall('dipfit','',1)
+plugin_askinstall('BIDS-matlab-tools','pop_importbids',1)
+plugin_askinstall('viewprops','pop_prop_extended',1)
 % Additionally required - installed manually: zapline, unfold
-% run('~/unfold/init_unfold.m')
+run('~/unfold/init_unfold.m')
 
-% Control structures
+%% Control structures
 cfg = struct();
 cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
-cfg.recalculate_ica = 1;
+cfg.recalculate_ica = 1; % Wnat to calculate ICA?
 cfg.srate = 256; % Downsample to
-cfg.reimport = 0;
+cfg.reimport = 0; % Want to start from the beginning/ with raw data?
+cfg.BIDS = 0; % Do you have a BIDS dataset?
+cfg.sName = ''; % What is the name of your study (only needed when BIDS tools are used)
 
-% Paths
-cfg.filepath_in  = '/store/data/MSc_EventDuration'; % Path to BIDS files
-cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/RS_replication/bids';
+%% Paths
+cfg.filepath_in  = '/store/data/..'; % Path to BIDS files
+cfg.filepath_out = '/store/data/../bids';
 addpath './functions'
 addpath './tmp'
 addpath /store/users/skukies/StudentProjects/MSc_EventDuration/lib/zapline-plus
-% Subjects
-% subjectsOddball  = [4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41];
-subjectsDuration = [1 2 3 4 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 27 28 29 30 31 32 33 34 35 37 38 39 40 41];
-subjectsOddball  = 4;
+%% Subjects
+subjectsDuration = []; % Subject numbers
+task = ''; % Name your task
 
-% Call BIDS tool BIDS
+%% Call BIDS tool BIDS
 if cfg.reimport
-    for switchTask = 1
-        if switchTask == 1
-            task = 'Oddball';
-            subjects = subjectsOddball;
-        elseif switchTask == 2
-            task = 'Duration';
-            subjects = subjectsDuration;
-        end
+    if cfg.BIDS == 0
         for i = subjects(1:end)
             filename = sprintf('sub-%03i_ses-001_task-%s_run-001_eeg.set',i,task);
             EEG = pop_loadset('filepath',[cfg.filepath_in,sprintf('/sub-%03i/ses-001/eeg/',i)],'filename',filename);
             % Remove channel 65 (sample number)
-            EEG.data(65,:) = [];
-            EEG.chanlocs(:,65) = [];
-            EEG.nbchan=64;
+%             EEG.data(65,:) = [];
+%             EEG.chanlocs(:,65) = [];
+%             EEG.nbchan=64;
             % Add columns that are missing since I couldn't load it with pop_importbids
             EEG.subject = sprintf('sub-%03i',i);
             EEG.session = 1;
             EEG.task = task;
-            % Load better events
-            tsv = tdfread(fullfile(cfg.filepath_in,sprintf('sub-%03i/ses-001/eeg/sub-%03i_ses-001_task-%s_run-001_events.tsv',i,i,task)));
-            EEG.event = struct2table(tsv);
-            EEG.event = renamevars(EEG.event,["sample","trial_type"],["latency","type"]); % Rename variables
-            EEG.event = struct2table(table2struct(EEG.event)); % Strange but doesn't work otherwise.
-            EEG.event.type = deblank(EEG.event.type);
-            if switchTask == 1
-                EEG.event.condition = deblank(EEG.event.condition);
-                EEG.event.target_response = deblank(EEG.event.target_response);
-            end
-            EEG.event = table2struct(EEG.event);
-            % Copy to ALLEEG
-            ALLEEG = [ALLEEG;EEG];
+            
+            %% Load better events
+            % The below was from Martins thesis, since we will likely reuse
+            % his experiment scripts I will leave this in for now
+            %             tsv = tdfread(fullfile(cfg.filepath_in,sprintf('sub-%03i/ses-001/eeg/sub-%03i_ses-001_task-%s_run-001_events.tsv',i,i,task)));
+            %             EEG.event = struct2table(tsv);
+            %             EEG.event = renamevars(EEG.event,["sample","trial_type"],["latency","type"]); % Rename variables
+            %             EEG.event = struct2table(table2struct(EEG.event)); % Strange but doesn't work otherwise.
+            %             EEG.event.type = deblank(EEG.event.type);
+            %             if switchTask == 1
+            %                 EEG.event.condition = deblank(EEG.event.condition);
+            %                 EEG.event.target_response = deblank(EEG.event.target_response);
+            %             end
+            %             EEG.event = table2struct(EEG.event);
+            %             % Copy to ALLEEG
+            ALLEEG = [ALLEEG;EEG];          
         end
+        
+    elseif cfg.BIDS == 1
+        [STUDY, ALLEEG] = pop_importbids(cfg.filepath_in,'bidsevent','on','bidschanloc','on',...
+            'studyName', cfg.sName,'outputdir', fullfile(cfg.filepath_out, 'derivatives'), ...
+            'eventtype', 'trial_type');
     end
-    
-    ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
-    CURRENTSTUDY    = 1;
-    EEG             = ALLEEG;
-    CURRENTSET      = 1:length(EEG);
-    cfg.subjectList = {EEG.subject};
 end
+
+ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
+CURRENTSTUDY    = 1;
+EEG             = ALLEEG;
+CURRENTSET      = 1:length(EEG);
+cfg.subjectList = {EEG.subject}; % This might crash in case of BIDS datasets; if it does change the respective lines further down
+
 %% Chanlocs
 for s=1:size(EEG,1)
     % Loading standard file
@@ -144,6 +150,8 @@ EEG_clean = EEG;
 
 % Compare cleaned data to the original:
 % vis_artifacts(EEG_clean(1),EEG(1));
+
+%% Save Datasets before ICA just in case
 for s = 1:size(EEG,2)
     EEG(s).filepath = fullfile(cfg.filepath_out,'derivatives/preprocessed_beforeICA/',cfg.subjectList{s},'eeg');
     if ~exist(EEG(s).filepath,'dir')
@@ -154,16 +162,7 @@ EEG = pop_saveset(EEG, 'savemode', 'resave');
 
 %% Run ICA and flag artifactual components using IClabel
 % If you load the data again, don't forget to run the cfg. bits from above
-if cfg.recalculate_ica
-    for switchTask = 1
-        if switchTask == 1
-            task = 'Oddball';
-            subjects = subjectsOddball;
-        elseif switchTask == 2
-            task = 'Duration';
-            subjects = subjectsDuration;
-        end
-        
+if cfg.recalculate_ica       
         %% Reload data if not reimported
         if ~cfg.reimport
             for switchTask = 1
@@ -236,7 +235,6 @@ if cfg.recalculate_ica
                 save(fullfile(outdir,sprintf('sub-%03i_task-%s_desc-infomax_ica.mat',sub,task)),'ICA')
             end
         end
-    end
     error('stop for now and wait for the ICAs :-)')
 end
 %% Reload data if not reimported
