@@ -39,11 +39,12 @@ plugin_askinstall('dipfit','',1)
 plugin_askinstall('BIDS-matlab-tools','pop_importbids',1)
 plugin_askinstall('viewprops','pop_prop_extended',1)
 % Additionally required - installed manually: zapline, unfold
-run('~/unfold/init_unfold.m')
+init_unfold
 
 %% Control structures
 cfg = struct();
 cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
+cfg.tmpDir = '/store/users/...'; % temporary directory for amica (/home is faster but might be too small so use /store) 
 cfg.recalculate_ica = 1; % Wnat to calculate ICA?
 cfg.srate = 256; % Downsample to
 cfg.reimport = 0; % Want to start from the beginning/ with raw data?
@@ -186,7 +187,8 @@ if cfg.recalculate_ica
             CURRENTSET      = 1:length(EEG);
             cfg.subjectList = {EEG.subject};
         end
-        
+       %%
+       if (~exist(cfg.tmpDir, 'dir')) && (cfg.amica); mkdir(cfg.tmpDir);end 
        %% 
         for sub = subjects(1:end)
             for i = 1:size(EEG,1)
@@ -216,11 +218,12 @@ if cfg.recalculate_ica
                 outdir = fullfile(outdir,'amica',filesep);
                 if ~exist(outdir, 'dir'); mkdir(outdir);end
                 
+                
                 % Todo Use AMICA, with automatic data rejection
                 ccs_runamica15(double(EEGica.data), ...
                     'num_models',num_models, 'outdir',outdir, ...
                     'numprocs', numprocs, 'max_threads', max_threads, ...
-                    'max_iter',max_iter, 'do_reject', 1, 'pcakeep',size(EEGica.data,1)-1,'tmpdir','/store/users/skukies/tmp/');
+                    'max_iter',max_iter, 'do_reject', 1, 'pcakeep',size(EEGica.data,1)-1,'tmpdir', cfg.tmpDir);
             else
                 % Infomax
                 EEGica = pop_runica(EEGica, 'icatype', 'runica', 'extended', 1, 'pca', size(EEGica.data,1)-1);
