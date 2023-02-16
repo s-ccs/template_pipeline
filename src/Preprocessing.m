@@ -44,6 +44,7 @@ init_unfold
 %% Control structures
 cfg = struct();
 cfg.amica = 1; % 0 for infomax. amica works now in reasonable time, no need for infomax
+cfg.numprocs = 1;    % 2 is to use amica t-mux in a parallel implementation
 cfg.tmpDir = '/store/users/...'; % temporary directory for amica (/home is faster but might be too small so use /store) 
 cfg.recalculate_ica = 1; % Wnat to calculate ICA?
 cfg.srate = 256; % Downsample to
@@ -68,9 +69,9 @@ if cfg.reimport
             filename = sprintf('sub-%03i_ses-001_task-%s_run-001_eeg.set',i,task);
             EEG = pop_loadset('filepath',[cfg.filepath_in,sprintf('/sub-%03i/ses-001/eeg/',i)],'filename',filename);
             % Remove channel 65 (sample number)
-%             EEG.data(65,:) = [];
-%             EEG.chanlocs(:,65) = [];
-%             EEG.nbchan=64;
+            %             EEG.data(65,:) = [];
+            %             EEG.chanlocs(:,65) = [];
+            %             EEG.nbchan=64;
             % Add columns that are missing since I couldn't load it with pop_importbids
             EEG.subject = sprintf('sub-%03i',i);
             EEG.session = 1;
@@ -90,7 +91,7 @@ if cfg.reimport
             %             end
             %             EEG.event = table2struct(EEG.event);
             %             % Copy to ALLEEG
-            ALLEEG = [ALLEEG;EEG];          
+            ALLEEG = [ALLEEG;EEG];
         end
         
     elseif cfg.BIDS == 1
@@ -98,69 +99,69 @@ if cfg.reimport
             'studyName', cfg.sName,'outputdir', fullfile(cfg.filepath_out, 'derivatives'), ...
             'eventtype', 'trial_type');
     end
-end
-
-ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
-CURRENTSTUDY    = 1;
-EEG             = ALLEEG;
-CURRENTSET      = 1:length(EEG);
-cfg.subjectList = {EEG.subject}; % This might crash in case of BIDS datasets; if it does change the respective lines further down
-
-%% Chanlocs
-for s=1:size(EEG,1)
-    % Loading standard file
-    EEG(s) = pop_chanedit(EEG(s), 'lookup','Standard-10-5-Cap385.sfp');
-    EEG(s).urchanlocs = EEG(s).chanlocs;
-end
-
-%% Downsample to 256 Hz
-EEG = pop_resample(EEG,cfg.srate);
-
-%% Remove 50 Hz line noise and unidentified 8 Hz noise and their harmonics
-for s = 1:length(EEG)
-    EEG(s) = clean_data_with_zapline_plus_eeglab_wrapper(EEG(s),struct('noisefreqs',[8,50]));
-end
-
-%% Remove bad channels
-rng(1) % Fix random
-
-EEG_cleanChan = pop_clean_rawdata( EEG,'FlatlineCriterion',5,'ChannelCriterion',0.8,...
-    'LineNoiseCriterion',4,'Highpass',[0.25 0.75] ,...
-    'BurstCriterion','off','WindowCriterion','off','BurstRejection','off',...
-    'Distance','Euclidian','WindowCriterionTolerances','off' );
-for s = 1:length(EEG)
-   
-    bad_chan = setdiff({EEG(s).chanlocs.labels}, {EEG_cleanChan(s).chanlocs.labels});
-    tmp_idx = cellfun(@(x) find(strcmp({EEG(s).chanlocs.labels} ,x)), bad_chan);
-    EEG(s) = pop_select(EEG(s), 'nochannel', tmp_idx);
     
-end
-clear('EEG_cleanChan', 'bad_chan', 'tmp_idx');
-
-%% Rereference using average reference
-EEG = pop_reref( EEG,[],'interpchan',['off']);
-
-%% Remove large spikes
-EEG_clean = EEG;
-
-% for s = 1:size(EEG,1)
-%     winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
-%     EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
-%     EEG_clean(s).etc.crap_winrej = winRej;
-% end
-
-% Compare cleaned data to the original:
-% vis_artifacts(EEG_clean(1),EEG(1));
-
-%% Save Datasets before ICA just in case
-for s = 1:size(EEG,2)
-    EEG(s).filepath = fullfile(cfg.filepath_out,'derivatives/preprocessed_beforeICA/',cfg.subjectList{s},'eeg');
-    if ~exist(EEG(s).filepath,'dir')
-        mkdir(EEG(s).filepath);
+    
+    ALLEEG          = pop_select(ALLEEG, 'nochannel',{'VEOG','HEOG'});
+    CURRENTSTUDY    = 1;
+    EEG             = ALLEEG;
+    CURRENTSET      = 1:length(EEG);
+    cfg.subjectList = {EEG.subject}; % This might crash in case of BIDS datasets; if it does change the respective lines further down
+    
+    %% Chanlocs
+    for s=1:size(EEG,1)
+        % Loading standard file
+        EEG(s) = pop_chanedit(EEG(s), 'lookup','Standard-10-5-Cap385.sfp');
+        EEG(s).urchanlocs = EEG(s).chanlocs;
     end
+    
+    %% Downsample
+    EEG = pop_resample(EEG,cfg.srate);
+    
+    %% Remove 50 Hz line noise
+    for s = 1:length(EEG)
+        EEG(s) = clean_data_with_zapline_plus_eeglab_wrapper(EEG(s),struct('noisefreqs',[50]));
+    end
+    
+    %% Remove bad channels
+    rng(1) % Fix random
+    
+    EEG_cleanChan = pop_clean_rawdata( EEG,'FlatlineCriterion',5,'ChannelCriterion',0.8,...
+        'LineNoiseCriterion',4,'Highpass',[0.25 0.75] ,...
+        'BurstCriterion','off','WindowCriterion','off','BurstRejection','off',...
+        'Distance','Euclidian','WindowCriterionTolerances','off' );
+    for s = 1:length(EEG)
+        
+        bad_chan = setdiff({EEG(s).chanlocs.labels}, {EEG_cleanChan(s).chanlocs.labels});
+        tmp_idx = cellfun(@(x) find(strcmp({EEG(s).chanlocs.labels} ,x)), bad_chan);
+        EEG(s) = pop_select(EEG(s), 'nochannel', tmp_idx);
+        
+    end
+    clear('EEG_cleanChan', 'bad_chan', 'tmp_idx');
+    
+    %% Rereference using average reference
+    EEG = pop_reref( EEG,[],'interpchan',['off']);
+    
+    %% Remove large spikes
+    EEG_clean = EEG;
+    
+    % for s = 1:size(EEG,1)
+    %     winRej = uf_continuousArtifactDetect(EEG(s),'amplitudeThreshold',1000);
+    %     EEG_clean(s) = eeg_eegrej( EEG(s), winRej );
+    %     EEG_clean(s).etc.crap_winrej = winRej;
+    % end
+    
+    % Compare cleaned data to the original:
+    % vis_artifacts(EEG_clean(1),EEG(1));
+    
+    %% Save Datasets before ICA just in case
+    for s = 1:size(EEG,1)
+        EEG(s).filepath = fullfile(cfg.filepath_out,'derivatives/preprocessed_beforeICA/',cfg.subjectList{s},'eeg');
+        if ~exist(EEG(s).filepath,'dir')
+            mkdir(EEG(s).filepath);
+        end
+    end
+    EEG = pop_saveset(EEG, 'savemode', 'resave');
 end
-EEG = pop_saveset(EEG, 'savemode', 'resave');
-
 %% Run ICA and flag artifactual components using IClabel
 % If you load the data again, don't forget to run the cfg. bits from above
 if cfg.recalculate_ica       
@@ -190,12 +191,7 @@ if cfg.recalculate_ica
        %%
        if (~exist(cfg.tmpDir, 'dir')) && (cfg.amica); mkdir(cfg.tmpDir);end 
        %% 
-        for sub = subjects(1:end)
-            for i = 1:size(EEG,1)
-                if isequal(EEG_clean(i).subject,sprintf('sub-%03i',sub)) && isequal(EEG_clean(i).task,task)
-                    s = i;
-                end
-            end
+        for s = 1:size(EEG,1)
             
             % Filter temporary at 1.5 Hz
             EEGica = EEG_clean(s);
@@ -210,7 +206,7 @@ if cfg.recalculate_ica
             
             if cfg.amica
                 % Define parameters
-                numprocs    = 1;    % 2 is to use t-mux in a parallel implementation
+                numprocs    = cfg.numprocs;    % 2 is to use t-mux in a parallel implementation
                 max_threads = 1;    % Number of threads
                 num_models  = 1;    % Number of models of mixture ICA
                 max_iter    = 1000; % Max number of learning steps
@@ -265,7 +261,7 @@ if ~cfg.reimport
 end
 
 %% Load ICA and ICLabel
-for s = 1:length(EEG)
+for s = 1:size(EEG,1)
     if cfg.amica
         cfg.filepath_out = '/store/data/non-bids/MSc_EventDuration/RS_replication';
         outdir= char(fullfile(cfg.filepath_out, 'derivatives','ica_Oddball',cfg.subjectList{s},'amica',filesep));
@@ -334,7 +330,10 @@ EEG = pop_eegfiltnew(EEG, 'locutoff',0.1);
 EEG = eeg_checkset(EEG);
 
 %% Update path
-for s = 1:size(EEG,2)
+
+if size(EEG,1) < size(EEG,2); EEG = EEG'; end % This might be needed cause one EEG function before changes the dimensions
+
+for s = 1:size(EEG,1)
     EEG(s).filepath = fullfile(cfg.filepath_out,'derivatives/preprocessed/',cfg.subjectList{s},'eeg');
     if ~exist(EEG(s).filepath,'dir')
         mkdir(EEG(s).filepath);
